@@ -14,5 +14,4 @@ if (!$conn || pg_connection_status($conn) !== PGSQL_CONNECTION_OK) {
     die("Database connection failed: " . pg_last_error($conn ?? null));
 }
 
-session_start();
 ?>
