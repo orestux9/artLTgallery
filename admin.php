@@ -7,139 +7,91 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
-// === HANDLE DELETION (WITH CLOUDINARY SUPPORT) ===
+// === DELETE WITH CLOUDINARY ===
 if (isset($_GET['delete'])) {
     $id = (int)$_GET['delete'];
     if ($id > 0) {
-        // Fetch artwork + cloud public_id
-        $stmt = $conn->prepare("SELECT filename, cloud_public_id FROM artwork WHERE id = ?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($row = $result->fetch_assoc()) {
-            // === DELETE FROM CLOUDINARY IF EXISTS ===
+        $res = pg_query_params($conn, "SELECT filename, cloud_public_id FROM artwork WHERE id = $1", [$id]);
+        if ($row = pg_fetch_assoc($res)) {
             if (!empty($row['cloud_public_id'])) {
-                // REPLACE THESE WITH YOUR CLOUDINARY CREDENTIALS
-                $cloud_name = 'dyh3gaj58';     // ← CHANGE THIS
-                $api_key    = '897155443339674';        // ← CHANGE THIS
-                $api_secret = '1wFe_abn1-1p6KyEyFZak-ovigs';    // ← CHANGE THIS
+                $cloud_name = 'dyh3gaj58';
+                $api_key    = '897155443339674';
+                $api_secret = '1wFe_abn1-1p6KyEyFZak-ovigs';
 
                 $timestamp  = time();
                 $signature  = sha1("public_id={$row['cloud_public_id']}&timestamp=$timestamp$api_secret");
 
-                $ch = curl_init();
-                curl_setopt($ch, CURLOPT_URL, "https://api.cloudinary.com/v1_1/$cloud_name/image/destroy");
+                $ch = curl_init("https://api.cloudinary.com/v1_1/$cloud_name/image/destroy");
                 curl_setopt($ch, CURLOPT_POST, true);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, [
-                    'public_id'  => $row['cloud_public_id'],
-                    'api_key'    => $api_key,
-                    'timestamp'  => $timestamp,
-                    'signature'  => $signature
+                    'public_id' => $row['cloud_public_id'],
+                    'api_key'   => $api_key,
+                    'timestamp' => $timestamp,
+                    'signature' => $signature
                 ]);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                $response = curl_exec($ch);
+                curl_exec($ch);
                 curl_close($ch);
-
-                $res = json_decode($response, true);
-                if ($res['result'] !== 'ok') {
-                    error_log("Cloudinary delete failed for ID $id: " . print_r($res, true));
-                }
-            }
-            // Fallback: delete local file if not cloud
-            elseif (!empty($row['filename']) && strpos($row['filename'], 'http') !== 0) {
-                $file = __DIR__ . '/uploads/' . basename($row['filename']);
-                if (file_exists($file)) unlink($file);
             }
         }
-        $stmt->close();
-
-        // Delete from database
-        $del = $conn->prepare("DELETE FROM artwork WHERE id = ?");
-        $del->bind_param("i", $id);
-        $del->execute();
-        $del->close();
+        pg_query_params($conn, "DELETE FROM artwork WHERE id = $1", [$id]);
     }
     header("Location: admin.php?deleted=1");
     exit;
 }
 
 // Fetch all artworks
-$stmt = $conn->prepare("
-    SELECT a.id, a.title, a.filename, a.uploaded_at, u.username 
-    FROM artwork a 
-    JOIN users u ON a.artist_id = u.id 
-    ORDER BY a.uploaded_at DESC
-");
-$stmt->execute();
-$res = $stmt->get_result();
-$artworks = $res->fetch_all(MYSQLI_ASSOC);
-$stmt->close();
+$res = pg_query($conn, "SELECT a.id, a.title, a.filename, a.uploaded_at, u.username FROM artwork a JOIN users u ON a.artist_id = u.id ORDER BY a.uploaded_at DESC");
+$artworks = pg_fetch_all($res) ?: [];
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="lt">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Panelė • Galerija</title>
-  <link href="tailwind.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; background: #0a0e1a; color: #e2e8f0; }
-    h1, h2, h3 { font-family: 'Playfair Display', serif; }
-    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel • ArtVerse</title>
+    <link href="tailwind.css" rel="stylesheet">
 </head>
-<body class="min-h-screen">
-
-  <?php if (isset($_GET['deleted'])): ?>
-    <div class="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-8 py-4 rounded-lg shadow-2xl z-50 animate-pulse font-bold">
-      Meno kūrinys sėkmingai ištrintas!
-    </div>
-  <?php endif; ?>
-
-  <nav class="glass sticky top-0 z-40 p-6 shadow-lg">
-    <div class="max-w-7xl mx-auto flex justify-between items-center">
-      <h1 class="text-3xl font-bold text-white">Skaitmeninė Lietuvos meno galerija <span class="text-red-400 text-sm">Admin</span></h1>
-      <div class="space-x-4">
-        <a href="index.php" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-semibold transition">Grįžti į galeriją</a>
-        <a href="logout.php" class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition">Atsijungti</a>
-      </div>
-    </div>
-  </nav>
-
-  <div class="max-w-7xl mx-auto px-6 py-12">
-    <h2 class="text-5xl font-bold text-center mb-4 text-white">Admin Panelė</h2>
-    <p class="text-center text-gray-400 mb-12">Ištrinkite norimus meno kūrinius</p>
-
-    <?php if (empty($artworks)): ?>
-      <p class="text-center text-2xl text-gray-500 py-20">Nėra meno kūrinių.</p>
-    <?php else: ?>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        <?php foreach($artworks as $art): ?>
-          <div class="glass rounded-2xl overflow-hidden shadow-2xl relative group">
-            <div class="aspect-w-1 aspect-h-1 bg-gray-900">
-              <img src="<?= htmlspecialchars($art['filename']) ?>" 
-                   alt="<?= htmlspecialchars($art['title']) ?>"
-                   class="w-full h-full object-cover">
-            </div>
-
-            <!-- Delete Button - Always visible -->
-            <a href="admin.php?delete=<?= $art['id'] ?>" 
-               class="absolute top-4 right-4 z-20 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold shadow-2xl transition transform hover:scale-110">
-               Ištrinti
-            </a>
-
-            <div class="p-6 bg-gradient-to-t from-black/80 to-transparent">
-              <h3 class="text-xl font-bold text-white"><?= htmlspecialchars($art['title']) ?></h3>
-              <p class="text-sm text-gray-300">by <?= htmlspecialchars($art['username']) ?></p>
-              <p class="text-xs text-gray-400 mt-1"><?= date('M j, Y - H:i', strtotime($art['uploaded_at'])) ?></p>
-            </div>
-          </div>
-        <?php endforeach; ?>
-      </div>
+<body class="bg-gradient-to-br from-indigo-900 to-purple-900 min-h-screen text-white">
+    <?php if (isset($_GET['deleted'])): ?>
+        <div class="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 px-8 py-4 rounded-xl shadow-2xl z-50 animate-pulse font-bold">
+            Kūrinys ištrintas!
+        </div>
     <?php endif; ?>
-  </div>
+
+    <nav class="bg-black/30 backdrop-blur-lg sticky top-0 z-40 p-6 shadow-2xl">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold">ArtVerse <span class="text-red-500">Admin</span></h1>
+            <div class="space-x-6">
+                <a href="index.php" class="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-xl font-bold">Grįžti į galeriją</a>
+                <a href="logout.php" class="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-xl font-bold">Atsijungti</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-6 py-12">
+        <h2 class="text-5xl font-bold text-center mb-12">Administratoriaus panelė</h2>
+
+        <?php if (empty($artworks)): ?>
+            <p class="text-center text-2xl text-gray-400 py-20">Nėra kūrinių</p>
+        <?php else: ?>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                <?php foreach($artworks as $art): ?>
+                    <div class="bg-white/10 backdrop-blur-lg rounded-3xl overflow-hidden shadow-2xl relative group">
+                        <img src="<?= htmlspecialchars($art['filename']) ?>" class="w-full h-64 object-cover">
+                        <a href="admin.php?delete=<?= $art['id'] ?>" 
+                           class="absolute top-4 right-4 z-20 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold shadow-2xl transition transform hover:scale-110">
+                           Ištrinti
+                        </a>
+                        <div class="p-6">
+                            <h3 class="text-xl font-bold"><?= htmlspecialchars($art['title']) ?></h3>
+                            <p class="text-sm opacity-80">by <?= htmlspecialchars($art['username']) ?></p>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
 </body>
 </html>
