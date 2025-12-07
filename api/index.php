@@ -9,7 +9,7 @@ $result = pg_query($conn, "SELECT a.*, u.username FROM artwork a JOIN users u ON
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Skaitmeninė Lietuvos meno galerija</title>
-  <link href="tailwind.css" rel="stylesheet">
+  <link href="../tailwind.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -34,12 +34,12 @@ $result = pg_query($conn, "SELECT a.*, u.username FROM artwork a JOIN users u ON
             <a href="/api/dashboard.php" class="text-indigo-600 font-semibold hover:underline">Mano galerija</a>
           <?php endif; ?>
           <?php if($_SESSION['role'] === 'admin'): ?>
-            <a href="/api/admin.php" class="text-red-600 font-bold hover:underline">Admin</a>
+            <a href="admin.php" class="text-red-600 font-bold hover:underline">Admin</a>
           <?php endif; ?>
-          <a href="/api/logout.php" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition">Atsijungti</a>
+          <a href="logout.php" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition">Atsijungti</a>
         <?php else: ?>
-          <a href="/api/login.php" class="text-indigo-600 font-semibold hover:underline">Prisijungti</a>
-          <a href="/api/register.php" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition">Registruotis</a>
+          <a href="login.php" class="text-indigo-600 font-semibold hover:underline">Prisijungti</a>
+          <a href="register.php" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition">Registruotis</a>
         <?php endif; ?>
       </div>
     </div>
